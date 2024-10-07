@@ -71,16 +71,26 @@ def _ica_def(X, tol, g, fun_args, max_iter, w_init):
     # j is the index of the extracted component
     for j in range(n_components):
         w = w_init[j, :].copy()
-        w /= np.sqrt((w ** 2).sum())
+        w /= np.linalg.norm(w)
+        # was w /= np.sqrt((w ** 2).sum())
 
         for i in range(max_iter):
-            gwtx, g_wtx = g(fast_dot(w.T, X), fun_args)
+            # NOTE: Instead of dot product, we use abs(W.conj().T.dot(X)) ** 2
+            gwtx, g_wtx = g(abs_sqr(w, X), fun_args)
 
-            w1 = (X * gwtx).mean(axis=1) - g_wtx.mean() * w
+            w1 = (X * (w.conj().T.dot(X)).conj() * gwtx).mean(1).reshape((n_components, 1)) - (
+                gwtx + abs_sqr(w, X) * g_wtx
+            ).mean() * w
+            # was w1 = (X * gwtx).mean(axis=1) - g_wtx.mean() * w1
 
-            _gs_decorrelation(w1, W, j)
+            del gwtx, g_wtx
 
-            w1 /= np.sqrt((w1 ** 2).sum())
+            w1 /= np.linalg.norm(w1)
+            # was w1 /= np.sqrt((w1 ** 2).sum())
+
+            # Decorrelation (complex version only?)
+            w1 -= W.dot(W.conj().T).dot(w1)
+            w1 /= np.linalg.norm(w1)
 
             lim = np.abs(np.abs((w1 * w).sum()) - 1)
             w = w1
@@ -88,7 +98,13 @@ def _ica_def(X, tol, g, fun_args, max_iter, w_init):
                 break
 
         n_iter.append(i + 1)
-        W[j, :] = w
+        W[j, :] = w  # .ravel()
+
+        if n_iter == max_iter and lim > tol:
+            warnings.warn(
+                "FastICA did not converge. Consider increasing "
+                "tolerance or the maximum number of iterations."
+            )
 
     return W, max(n_iter)
 
