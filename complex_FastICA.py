@@ -38,9 +38,8 @@ def _ica_par(X, tol, g, fun_args, max_iter, w_init):
     Used internally by FastICA --main loop
 
     """
-    W = _sym_decorrelation(w_init)
-    del w_init
-    p_ = float(X.shape[1])
+    n_components = w_init.shape[0]
+    W = w_init
 
     # cache the covariance matrix
     C = np.cov(X)
@@ -48,9 +47,9 @@ def _ica_par(X, tol, g, fun_args, max_iter, w_init):
     for ii in range(max_iter):
         # NOTE: Instead of dot product, we use abs(W.conj().T.dot(X)) ** 2
         gwtx, g_wtx = g(abs_sqr(W, X), fun_args)
-        W1 = (X * (W.conj().T.dot(X)).conj() * gwtx).mean(1).reshape((n_components, 1)) - (
-            gwtx + abs_sqr(W, X) * g_wtx
-        ).mean() * W
+        W1 = (X * (W.conj().T.dot(X)).conj() * gwtx).mean(1).reshape(
+            (n_components, 1)
+        ) - (gwtx + abs_sqr(W, X) * g_wtx).mean() * W
         # was W1 = _sym_decorrelation(fast_dot(gwtx, X.T) / p_
         #                             - g_wtx[:, np.newaxis] * W)
 
@@ -67,8 +66,10 @@ def _ica_par(X, tol, g, fun_args, max_iter, w_init):
             break
 
     if (ii + 1) == max_iter and lim > tol:
-        warnings.warn('FastICA did not converge. Consider increasing '
-                      'tolerance or the maximum number of iterations.')
+        warnings.warn(
+            "FastICA did not converge. Consider increasing "
+            "tolerance or the maximum number of iterations."
+        )
 
     return W, ii + 1
 
@@ -93,9 +94,9 @@ def _ica_def(X, tol, g, fun_args, max_iter, w_init):
             # NOTE: Instead of dot product, we use abs(W.conj().T.dot(X)) ** 2
             gwtx, g_wtx = g(abs_sqr(w, X), fun_args)
 
-            w1 = (X * (w.conj().T.dot(X)).conj() * gwtx).mean(1).reshape((n_components, 1)) - (
-                gwtx + abs_sqr(w, X) * g_wtx
-            ).mean() * w
+            w1 = (X * (w.conj().T.dot(X)).conj() * gwtx).mean(1).reshape(
+                (n_components, 1)
+            ) - (gwtx + abs_sqr(w, X) * g_wtx).mean() * w
             # was w1 = (X * gwtx).mean(axis=1) - g_wtx.mean() * w1
 
             del gwtx, g_wtx
@@ -204,13 +205,12 @@ def complex_FastICA(
     if fun == "custom":
         g = _custom_contrast
     elif callable(fun):
+
         def g(x, w, fun_args):
             return fun(x, w, **fun_args)
     else:
-        exc = ValueError if isinstance(fun, six.string_types) else TypeError
-        raise exc("Unknown function %r;"
-                  " should be one of 'custom' or callable"
-                  % fun)
+        exc = ValueError if isinstance(fun, str) else TypeError
+        raise exc("Unknown function %r; should be one of 'custom' or callable" % fun)
 
     n, m = X.shape
 
@@ -221,19 +221,18 @@ def complex_FastICA(
         X -= X.mean(1, keepdims=True)
         Ux, Sx = np.linalg.eig(np.cov(X))
         K = np.sqrt(np.linalg.inv(np.diag(Ux))).dot(Sx.conj().T)[:n]
-        X = K.dot(X)
+        X1 = K.dot(X)
         del Ux, Sx
     else:
         K = None
-
-    EG = np.ones((n, max_iter)) * np.nan
+        X1 = X.copy()
 
     kwargs = {
-        'tol': tol,
-        'g': g,
-        'fun_args': fun_args,
-        'max_iter': max_iter,
-        'w_init': w_init,
+        "tol": tol,
+        "g": g,
+        "fun_args": fun_args,
+        "max_iter": max_iter,
+        "w_init": w_init,
     }
     if algorithm == "parallel":
         W, n_iter = _ica_par(X1, **kwargs)
@@ -241,101 +240,9 @@ def complex_FastICA(
         W, n_iter = _ica_def(X1, **kwargs)
     else:
         raise ValueError("Invalid algorithm")
-
     del X1
 
-    if algorithm == "deflation":
-        W = np.zeros((n, n), dtype=np.complex)
-
-        for k in range(n):
-            if w_init is not None:
-                w = w_init[:, k]
-            else:
-                w = np.random.normal(size=(n, 1)) + 1j * np.random.normal(size=(n, 1))
-
-            w /= np.linalg.norm(w)
-
-            n_iter = 0
-
-            for i in range(max_iter):
-                wold = np.copy(w)
-
-                gwtx, g_wtx = g(abs_sqr(w, X), fun_args)
-                # NOTE: Instead of dot product, we use abs(W.conj().T.dot(X)) ** 2
-
-                w = (X * (w.conj().T.dot(X)).conj() * gwtx).mean(1).reshape((n, 1)) - (
-                    gwtx + abs_sqr(w, X) * g_wtx
-                ).mean() * w
-
-                del gwtx, g_wtx
-
-                w /= np.linalg.norm(w)
-
-                # Decorrelation
-                w -= W.dot(W.conj().T).dot(w)
-                w /= np.linalg.norm(w)
-
-                EG[k, n_iter] = (np.log(epsilon + abs_sqr(w, X))).mean()
-
-                n_iter += 1
-
-                lim = (abs(abs(wold) - abs(w))).sum()
-                if lim < tol:
-                    break
-
-            if n_iter == max_iter and lim > tol:
-                warnings.warn(
-                    "FastICA did not converge. Consider increasing "
-                    "tolerance or the maximum number of iterations."
-                )
-
-            W[:, k] = w.ravel()
-
-    elif algorithm == "parallel":
-        if w_init is not None:
-            W = w_init
-        else:
-            W = np.random.normal(size=(n, n)) + 1j * np.random.normal(size=(n, n))
-
-        n_iter = 0
-
-        # cache the covariance matrix
-        C = np.cov(X)
-
-        for i in range(max_iter):
-            Wold = np.copy(W)
-
-            for j in range(n):
-
-                # derivative of the contrast function
-                gwtx = (1 / (epsilon + abs_sqr(W[:, j], X))).reshape((1, m))
-                # derivative of gwtx
-                g_wtx = -(1 / (epsilon + abs_sqr(W[:, j], X)) ** 2).reshape((1, m))
-
-                W[:, j] = (X * (W[:, j].conj().T.dot(X)).conj() * gwtx).mean(1) - (
-                    gwtx + abs_sqr(W[:, j], X) * g_wtx
-                ).mean() * W[:, j]
-                del gwtx, g_wtx
-
-            # Symmetric decorrelation
-            Uw, Sw = np.linalg.eig(W.conj().T.dot(C.dot(W)))
-            W = W.dot(Sw.dot(np.linalg.inv(np.sqrt(np.diag(Uw))).dot(Sw.conj().T)))
-            del Uw, Sw
-
-            EG[:, n_iter] = (np.log(epsilon + abs_sqr(W, X))).mean(1)
-
-            n_iter += 1
-
-            lim = (abs(abs(Wold) - abs(W))).sum()
-            if lim < tol:
-                break
-
-        if n_iter == max_iter and lim > tol:
-            warnings.warn(
-                "FastICA did not converge. Consider increasing "
-                "tolerance or the maximum number of iterations."
-            )
-
+    # compute sources
     S = W.conj().T.dot(X)
 
-    return K, W, S, EG
+    return K, W, S, n_iter
