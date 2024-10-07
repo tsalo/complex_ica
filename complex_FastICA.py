@@ -41,17 +41,32 @@ def _ica_par(X, tol, g, fun_args, max_iter, w_init):
     W = _sym_decorrelation(w_init)
     del w_init
     p_ = float(X.shape[1])
+
+    # cache the covariance matrix
+    C = np.cov(X)
+
     for ii in range(max_iter):
-        gwtx, g_wtx = g(fast_dot(W, X), fun_args)
-        W1 = _sym_decorrelation(fast_dot(gwtx, X.T) / p_
-                                - g_wtx[:, np.newaxis] * W)
+        # NOTE: Instead of dot product, we use abs(W.conj().T.dot(X)) ** 2
+        gwtx, g_wtx = g(abs_sqr(W, X), fun_args)
+        W1 = (X * (W.conj().T.dot(X)).conj() * gwtx).mean(1).reshape((n_components, 1)) - (
+            gwtx + abs_sqr(W, X) * g_wtx
+        ).mean() * W
+        # was W1 = _sym_decorrelation(fast_dot(gwtx, X.T) / p_
+        #                             - g_wtx[:, np.newaxis] * W)
+
         del gwtx, g_wtx
-        # builtin max, abs are faster than numpy counter parts.
-        lim = max(abs(abs(np.diag(fast_dot(W1, W.T))) - 1))
+
+        # Symmetric decorrelation
+        Uw, Sw = np.linalg.eig(W1.conj().T.dot(C.dot(W1)))
+        W1 = W1.dot(Sw.dot(np.linalg.inv(np.sqrt(np.diag(Uw))).dot(Sw.conj().T)))
+        del Uw, Sw
+
+        lim = np.abs(np.abs((W1 * W).sum()) - 1)
         W = W1
         if lim < tol:
             break
-    else:
+
+    if (ii + 1) == max_iter and lim > tol:
         warnings.warn('FastICA did not converge. Consider increasing '
                       'tolerance or the maximum number of iterations.')
 
