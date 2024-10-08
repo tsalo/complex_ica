@@ -24,12 +24,13 @@ def abs_sqr(W, X):
     return abs(W.conj().T.dot(X)) ** 2
 
 
-def _custom_contrast(x, epsilon=0.1):
+def _custom_contrast(x, kwargs):
+    epsilon = kwargs.get("epsilon", 0.1)
     # derivative of the contrast function
-    g = 1 / (epsilon + x)
+    g_ = 1 / (epsilon + x)
     # derivative of g
-    dg = -1 / (epsilon + x) ** 2
-    return g, dg
+    dg_ = -1 / (epsilon + x) ** 2
+    return g_, dg_
 
 
 def _ica_par(X, tol, g, fun_args, max_iter, w_init):
@@ -87,26 +88,34 @@ def _ica_def(X, tol, g, fun_args, max_iter, w_init):
     # j is the index of the extracted component
     for j in range(n_components):
         w = w_init[j, :].copy()
+        print("w")
+        print(w.shape)
         w /= np.linalg.norm(w)
+        print(w.shape)
         # was w /= np.sqrt((w ** 2).sum())
 
         for i in range(max_iter):
             # NOTE: Instead of dot product, we use abs(W.conj().T.dot(X)) ** 2
             gwtx, g_wtx = g(abs_sqr(w, X), fun_args)
 
+            print("w1")
             w1 = (X * (w.conj().T.dot(X)).conj() * gwtx).mean(1).reshape(
                 (n_components, 1)
             ) - (gwtx + abs_sqr(w, X) * g_wtx).mean() * w
             # was w1 = (X * gwtx).mean(axis=1) - g_wtx.mean() * w1
+            print(w1.shape)
 
             del gwtx, g_wtx
 
             w1 /= np.linalg.norm(w1)
+            print(w1.shape)
             # was w1 /= np.sqrt((w1 ** 2).sum())
 
             # Decorrelation (complex version only?)
             w1 -= W.dot(W.conj().T).dot(w1)
+            print(w1.shape)
             w1 /= np.linalg.norm(w1)
+            print(w1.shape)
 
             lim = np.abs(np.abs((w1 * w).sum()) - 1)
             w = w1
@@ -210,9 +219,12 @@ def complex_FastICA(
             return fun(x, w, **fun_args)
     else:
         exc = ValueError if isinstance(fun, str) else TypeError
-        raise exc("Unknown function %r; should be one of 'custom' or callable" % fun)
+        raise exc("Unknown function %r; should be one of 'custom' or callable", fun)
 
     n, m = X.shape
+
+    if w_init is None:
+        w_init = np.random.normal(size=(n, n)) + 1j * np.random.normal(size=(n, n))
 
     if n_components is not None:
         n = n_components

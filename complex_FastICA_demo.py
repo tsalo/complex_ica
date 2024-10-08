@@ -76,8 +76,7 @@ X = A.dot(S)
 
 alg = "deflation"  # 'parallel'
 
-K, W, Shat, EG = cica.complex_FastICA(X, max_iter=40, algorithm=alg, n_components=n)
-
+K, W, Shat, n_iters = cica.complex_FastICA(X, max_iter=40, algorithm=alg, n_components=n)
 
 # Compute the SSE
 absKAHW = np.abs((K.dot(A)).conj().T.dot(W))
@@ -97,13 +96,6 @@ start = np.random.randint(m - span)
 
 fig = plt.figure("fastICA_demo")
 fig.clf()
-
-ax1 = fig.add_subplot(121)
-for j in range(n):
-    ax1.plot(np.ma.masked_invalid(EG[j]), ".-", label="c_%i" % (j + 1))
-ax1.set_ylabel("E[G(|W.T*X|^2)]")
-ax1.set_xlabel("iteration #")
-plt.legend(loc="best")
 
 ax2 = fig.add_subplot(222)
 ax2.plot(np.abs(S[:, start : start + span]).T, lw=3, alpha=0.2, color="k")
