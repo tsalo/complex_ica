@@ -89,34 +89,27 @@ def _ica_def(X, tol, g, fun_args, max_iter, w_init):
     for j in range(n_components):
         w = w_init[j, :].copy()
         w = w[:, None]  # needs to be 2D
-        print("w")
-        print(w.shape)
+
         w /= np.linalg.norm(w)
-        print(w.shape)
         # was w /= np.sqrt((w ** 2).sum())
 
         for i in range(max_iter):
             # NOTE: Instead of dot product, we use abs(W.conj().T.dot(X)) ** 2
             gwtx, g_wtx = g(abs_sqr(w, X), fun_args)
 
-            print("w1")
             w1 = (X * (w.conj().T.dot(X)).conj() * gwtx).mean(1).reshape(
                 (n_components, 1)
             ) - (gwtx + abs_sqr(w, X) * g_wtx).mean() * w
             # was w1 = (X * gwtx).mean(axis=1) - g_wtx.mean() * w1
-            print(w1.shape)
 
             del gwtx, g_wtx
 
             w1 /= np.linalg.norm(w1)
-            print(w1.shape)
             # was w1 /= np.sqrt((w1 ** 2).sum())
 
             # Decorrelation (complex version only?)
             w1 -= W.dot(W.conj().T).dot(w1)
-            print(w1.shape)
             w1 /= np.linalg.norm(w1)
-            print(w1.shape)
 
             lim = np.abs(np.abs((w1 * w).sum()) - 1)
             w = w1
