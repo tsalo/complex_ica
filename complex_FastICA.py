@@ -88,6 +88,7 @@ def _ica_def(X, tol, g, fun_args, max_iter, w_init):
     # j is the index of the extracted component
     for j in range(n_components):
         w = w_init[j, :].copy()
+        w = w[:, None]  # needs to be 2D
         print("w")
         print(w.shape)
         w /= np.linalg.norm(w)
@@ -123,7 +124,7 @@ def _ica_def(X, tol, g, fun_args, max_iter, w_init):
                 break
 
         n_iter.append(i + 1)
-        W[j, :] = w  # .ravel()
+        W[j, :] = np.squeeze(w)
 
         if n_iter == max_iter and lim > tol:
             warnings.warn(
